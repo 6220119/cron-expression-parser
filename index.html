@@ -445,7 +445,13 @@
             });
         });
 
-        cronInput.addEventListener('input', updateExplanation);
+        // Change the input event listener to use debouncing for better performance
+        let debounceTimer;
+        cronInput.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => updateExplanation(), 300);
+        });
+
         updateExplanation();
     </script>
 </body>
