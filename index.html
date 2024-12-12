@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cron Expression Parser</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700&family=Source+Sans+3:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #064E3B;
+            --background-color: #f8fafc;
+            --text-color: #1e293b;
+            --border-color: #e2e8f0;
+            --star-color: #FFD700;
+            --explanation-bg: white;
+            --example-bg: white;
+            --example-hover-shadow: rgba(124, 58, 237, 0.1);
+            --human-readable-bg: #f1f5f9;
+            --examples-bg: #f8fafc;
+            --next-run-bg: #f1f5f9;
+            --label-color: #64748b;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary-color: #34d399;
+                --background-color: #1a1a1a;
+                --text-color: #e2e8f0;
+                --border-color: #2d2d2d;
+                --explanation-bg: #262626;
+                --example-bg: #262626;
+                --example-hover-shadow: rgba(52, 211, 153, 0.1);
+                --human-readable-bg: #1f2937;
+                --examples-bg: #1f1f1f;
+                --next-run-bg: #1f2937;
+                --label-color: #94a3b8;
+            }
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom right, #1a1a1a, #2d2d2d);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 1;
+            transition: opacity 0.5s ease-out;
+        }
+
+        .loading-overlay.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader {
+            display: flex;
+            gap: 6px;
+            align-items: flex-end;
+            height: 40px;
+            position: relative;
+        }
+
+        .wand {
+            position: relative;
+            font-size: 2rem;
+            margin-right: 1rem;
+            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+        }
+
+        .star {
+            width: auto;
+            height: auto;
+            position: absolute;
+            left: 0.5rem;
+            top: 10%;
+            font-size: 1.5rem;
+            content: "🌟";
+            color: var(--star-color);
+            text-shadow:
+                0 0 10px rgba(255, 215, 0, 0.6),
+                0 0 20px rgba(255, 215, 0, 0.4);
+            filter: brightness(1.2);
+            animation: spiral 2s ease-in-out infinite;
+            opacity: 0;
+        }
+
+        .star:nth-child(2) {
+            animation-delay: 0.3s;
+        }
+
+        .star:nth-child(3) {
+            animation-delay: 0.6s;
+        }
+
+        .star::before {
+            content: "🌟";
+            position: absolute;
+        }
+
+        @keyframes spiral {
+            0% {
+                transform: rotate(0deg) translateX(1rem) scale(0);
+                opacity: 0;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                transform: rotate(360deg) translateX(1.5rem) scale(1);
+                opacity: 0;
+            }
+        }
+
+        .content {
+            opacity: 0;
+            transition: opacity 0.3s ease-in;
+        }
+
+        .content.loaded {
+            opacity: 1;
+        }
+
+        body {
+            font-family: 'Source Sans 3', system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 2rem;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+
+        h1,
+        h3 {
+            font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        .label {
+            color: var(--label-color);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .input-group {
+            width: 100%;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.8rem;
+            font-size: 1.2rem;
+            border: 2px solid var(--border-color);
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-family: 'Fira Code', monospace;
+            box-sizing: border-box;
+            appearance: none;
+            -webkit-appearance: none;
+            background-color: var(--explanation-bg);
+            color: var(--text-color);
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .explanation {
+            background: var(--explanation-bg);
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        .human-readable {
+            font-size: 1.2rem;
+            padding: 1rem;
+            background: var(--human-readable-bg);
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .examples {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: var(--examples-bg);
+            border-radius: 0.5rem;
+        }
+
+        .examples h3 {
+            margin-bottom: 1rem;
+        }
+
+        .example {
+            cursor: pointer;
+            padding: 0.8rem 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.8rem;
+            background: var(--example-bg);
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .example::after {
+            content: "→";
+            margin-left: auto;
+            color: var(--primary-color);
+            opacity: 0;
+            transform: translateX(-5px);
+            transition: all 0.2s ease;
+        }
+
+        .example:hover {
+            background-color: var(--example-bg);
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 6px -1px var(--example-hover-shadow);
+            transform: translateY(-1px);
+        }
+
+        .example:hover::after {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .example:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 2px rgba(124, 58, 237, 0.1);
+        }
+
+        .error {
+            color: #dc2626;
+            padding: 1rem;
+            background: #fee2e2;
+            border-radius: 0.5rem;
+            display: none;
+            margin-bottom: 1rem;
+            border: 1px solid #fecaca;
+        }
+
+        .error.visible {
+            display: block;
+        }
+
+        .next-run {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--next-run-bg);
+            border-radius: 0.5rem;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .star {
+                animation: none;
+            }
+
+            .loading-overlay {
+                transition: none;
+            }
+
+            .container {
+                transform: none;
+                transition: opacity 0.2s ease-out;
+            }
+
+            .example,
+            .example:after {
+                transition: none;
+            }
+        }
+
+        @media screen and (max-width: 640px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 1.8rem;
+                line-height: 1.2;
+            }
+
+            .label {
+                font-size: 0.9rem;
+                line-height: 1.2;
+            }
+
+            input {
+                font-size: 1.1rem;
+                padding: 0.7rem;
+            }
+
+            .explanation {
+                padding: 1rem;
+            }
+
+            .human-readable {
+                font-size: 1rem;
+                padding: 0.8rem;
+            }
+
+            .example {
+                padding: 0.7rem;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loader">
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+        </div>
+        <div class="wand">🪄</div>
+    </div>
+
+    <div class="container">
+        <h1>Cron Expression Parser</h1>
+        <div class="explanation" id="explanation">
+            <label for="cronInput" class="label">Enter a cron expression to get a human-readable explanation</label>
+            <div class="input-group">
+                <input type="text" id="cronInput" placeholder="Enter cron expression (e.g., */15 * * * *)"
+                    value="*/15 * * * *">
+                <div class="error" id="errorMessage"></div>
+            </div>
+            <div class="human-readable" id="humanReadable"></div>
+            <div class="next-run">
+                <strong>Next run:</strong> <span id="nextRun"></span>
+            </div>
+        </div>
+
+        <div class="examples">
+            <h3>Common Examples</h3>
+            <div class="example" data-cron="*/15 * * * *">Every 15 minutes</div>
+            <div class="example" data-cron="0 * * * *">Every hour</div>
+            <div class="example" data-cron="0 0 * * *">Every day at midnight</div>
+            <div class="example" data-cron="0 9-17 * * 1-5">Every hour from 9 AM to 5 PM, Monday through Friday</div>
+            <div class="example" data-cron="0 0 * * 0">Every Sunday at midnight</div>
+        </div>
+    </div>
+
+    <script type="module">
+        import cronstrue from 'https://cdn.skypack.dev/cronstrue';
+        import parser from 'https://cdn.skypack.dev/cron-parser';
+
+        // Hide loading overlay once modules are loaded
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const container = document.querySelector('.container');
+
+        // Add fade-out class to overlay and fade-in class to container
+        loadingOverlay.classList.add('fade-out');
+        container.classList.add('fade-in');
+
+        // Remove the overlay from DOM after animation completes
+        loadingOverlay.addEventListener('transitionend', () => {
+            loadingOverlay.style.display = 'none';
+        });
+
+        const cronInput = document.getElementById('cronInput');
+        const errorMessage = document.getElementById('errorMessage');
+        const humanReadable = document.getElementById('humanReadable');
+        const nextRun = document.getElementById('nextRun');
+
+        function updateExplanation(skipUrlUpdate = false) {
+            try {
+                const expr = cronInput.value.trim();
+
+                // Basic validation for empty input
+                if (!expr) {
+                    throw new Error('Please enter a cron expression');
+                }
+
+                // Validate the expression has 5 parts
+                const parts = expr.split(' ').filter(part => part.length > 0);
+                if (parts.length !== 5) {
+                    throw new Error('Invalid cron expression. Expected 5 space-separated values');
+                }
+
+                const explanation = cronstrue.toString(expr);
+                humanReadable.textContent = explanation;
+
+                const interval = parser.parseExpression(expr);
+                const next = interval.next().toDate();
+                nextRun.textContent = next.toLocaleString();
+
+                // Clear error state
+                errorMessage.classList.remove('visible');
+                document.querySelector('.explanation').classList.remove('has-error');
+
+                // Update URL hash if expression is valid and skipUrlUpdate is false
+                if (!skipUrlUpdate) {
+                    window.location.hash = encodeURIComponent(expr);
+                }
+            } catch (error) {
+                errorMessage.textContent = error.message || 'Not supported cron expression';
+                errorMessage.classList.add('visible');
+                document.querySelector('.explanation').classList.add('has-error');
+            }
+        }
+
+        // Handle URL hash changes
+        window.addEventListener('hashchange', () => {
+            const hash = decodeURIComponent(window.location.hash.slice(1));
+            if (hash) {
+                cronInput.value = hash;
+                updateExplanation(true); // Skip URL update to avoid infinite loop
+            }
+        });
+
+        // Check for initial hash value
+        if (window.location.hash) {
+            const hash = decodeURIComponent(window.location.hash.slice(1));
+            cronInput.value = hash;
+            updateExplanation(true);
+        }
+
+        document.querySelectorAll('.example').forEach(example => {
+            example.addEventListener('click', () => {
+                cronInput.value = example.dataset.cron;
+                updateExplanation();
+            });
+        });
+
+        cronInput.addEventListener('input', updateExplanation);
+        updateExplanation();
+    </script>
+</body>
+
+</html>
